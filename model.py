@@ -80,13 +80,22 @@ class CausalSelfAttention(nn.Module):
 class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.activation = config.activation
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)  # Updated projection
         self.dropout = nn.Dropout(config.dropout)
-        self.activation = config.activation
+        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+
+        if self.activation in ["swiglu"]:  # second weight matrix for SwiGLU, note we don't automatically match parameter count by changing hidden units as in PaLM
+            self.c_fc2 = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+
+        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
+        self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        x = self.c_fc(x)
+
+        if self.activation not in ["swiglu"]:
+            x = self.c_fc(x)
         
         if self.activation == 'gelu':
             # GELU approximation
@@ -96,10 +105,8 @@ class MLP(nn.Module):
         elif self.activation == "silu":
             x = F.silu(x)
         elif self.activation == 'swiglu':
-            print(x.shape)
-            x1, x2 = x.chunk(2, dim=-1)
-            print(x1.shape)
-            print(x2.shape)
+            x1 = self.c_fc(x)
+            x2 = self.c_fc2(x)
             x = F.silu(x1) * x2
         else:
             raise ValueError(f"Unsupported activation function: {self.activation}")
@@ -124,7 +131,6 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    activation: str = "swiglu"
     block_size: int = 1024
     vocab_size: int = 50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
     n_layer: int = 12
@@ -132,7 +138,7 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
-    activation: str = 'gelu'  # Default activation function
+    activation: str = 'swiglu'  # Default activation function
 
 class GPT(nn.Module):
 

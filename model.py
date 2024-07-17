@@ -81,7 +81,7 @@ class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
-        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
+        self.c_proj  = nn.Linear(2 * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
         self.activation = config.activation
 
@@ -90,8 +90,10 @@ class MLP(nn.Module):
         
         if self.activation == 'gelu':
             x = F.gelu(x)
+            x, _ = x.chunk(2, dim=-1)  # Only keep half the dimensions
         elif self.activation == 'relu':
             x = F.relu(x)
+            x, _ = x.chunk(2, dim=-1)  # Only keep half the dimensions
         elif self.activation in ['silu', 'swiglu']:
             x, gate = x.chunk(2, dim=-1)
             x = F.silu(gate) * x

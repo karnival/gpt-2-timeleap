@@ -78,7 +78,6 @@ class CausalSelfAttention(nn.Module):
         return y
 
 class MLP(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
@@ -124,7 +123,6 @@ class GPTConfig:
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
-    activation: str = 'silu'  # Default to SiLU (same as SwiGLU in the original code)
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 

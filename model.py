@@ -89,14 +89,18 @@ class MLP(nn.Module):
         x = self.c_fc(x)
         
         if self.activation == 'gelu':
-            x = F.gelu(x)
-            x, _ = x.chunk(2, dim=-1)  # Only keep half the dimensions
+            # GELU approximation
+            x = 0.5 * x * (1 + torch.tanh(math.sqrt(2/math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         elif self.activation == 'relu':
-            x = F.relu(x)
-            x, _ = x.chunk(2, dim=-1)  # Only keep half the dimensions
-        elif self.activation in ['silu', 'swiglu']:
+            # ReLU
+            x = torch.max(torch.zeros_like(x), x)
+        elif self.activation == 'silu':
+            # SiLU/Swish
+            x = self.silu(x)
+        elif self.activation == 'swiglu':
+            # SwiGLU
             x, gate = x.chunk(2, dim=-1)
-            x = F.silu(gate) * x
+            x = self.silu(gate) * x
         else:
             raise ValueError(f"Unsupported activation function: {self.activation}")
         
@@ -127,6 +131,7 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    activation: str = 'gelu'  # Default activation function
 
 class GPT(nn.Module):
 

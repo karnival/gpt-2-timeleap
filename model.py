@@ -90,17 +90,17 @@ class MLP(nn.Module):
         
         if self.activation == 'gelu':
             # GELU approximation
-            x = 0.5 * x * (1 + torch.tanh(math.sqrt(2/math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+            x = 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         elif self.activation == 'relu':
             # ReLU
-            x = torch.max(torch.zeros_like(x), x)
+            x = torch.relu(x)
         elif self.activation == 'silu':
             # SiLU/Swish
-            x = self.silu(x)
+            x = torch.nn.functional.silu(x)
         elif self.activation == 'swiglu':
             # SwiGLU
             x, gate = x.chunk(2, dim=-1)
-            x = self.silu(gate) * x
+            x = torch.nn.functional.silu(gate) * x
         else:
             raise ValueError(f"Unsupported activation function: {self.activation}")
         

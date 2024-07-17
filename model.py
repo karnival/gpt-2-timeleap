@@ -28,6 +28,46 @@ class RMSNorm(nn.Module):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
+
+def apply_rope(q, k, pos_encodings):
+    """
+    Apply RoPE to query and key vectors.
+    Args:
+    - q: Query vectors [batch_size, num_heads, seq_length, head_dim]
+    - k: Key vectors [batch_size, num_heads, seq_length, head_dim]
+    - pos_encodings: Precomputed RoPE encodings for the positions [seq_length, head_dim]
+    Returns:
+    - Rotated query and key vectors
+    """
+    batch_size, num_heads, seq_length, head_dim = q.shape
+
+    cos_pos = pos_encodings[..., ::2].repeat_interleave(2, dim=-1)
+    sin_pos = pos_encodings[..., 1::2].repeat_interleave(2, dim=-1)
+
+    q_rotated = q * cos_pos + rotate_half(q) * sin_pos
+    k_rotated = k * cos_pos + rotate_half(k) * sin_pos
+
+    return q_rotated, k_rotated
+
+
+def rotate_half(x):
+    """
+    Rotate half of the dimensions.
+    Args:
+    - x: Input tensor [batch_size, num_heads, seq_length, head_dim]
+    Returns:
+    - Rotated tensor
+    """
+    x1, x2 = x.split(x.size(-1) // 2, dim=-1)
+    return torch.cat([-x2, x1], dim=-1)
+
+
+def precompute_rope_encodings(seq_length, head_dim):
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, head_dim, 2).float() / head_dim))
+    pos_seq = torch.arange(0, seq_length, dtype=torch.float)
+    pos_enc = torch.einsum("i,j->ij", pos_seq, inv_freq)
+    return torch.cat([torch.cos(pos_enc), torch.sin(pos_enc)], dim=-1)
+
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
@@ -51,6 +91,8 @@ class CausalSelfAttention(nn.Module):
             self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
                                         .view(1, 1, config.block_size, config.block_size))
 
+        self.rope_encodings = precompute_rope_encodings(config.block_size, config.n_embd // config.n_head)
+
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
@@ -59,6 +101,13 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+
+        # apply RoPE
+        # q, k = apply_rope(q, k, self.rope_encodings[:T])
+        if self.rope_encodings.shape[0] != T:
+            q, k = apply_rope(q, k, precompute_rope_encodings(T, self.rope_encodings.shape[1]))
+        else:
+            q, k = apply_rope(q, k, self.rope_encodings)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:

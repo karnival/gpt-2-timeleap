@@ -89,7 +89,7 @@ class CausalSelfAttention(nn.Module):
         inv_freq = 1.0 / (10000 ** (torch.arange(0, head_dim, 2).float() / head_dim))
         pos_seq = torch.arange(0, seq_length, dtype=torch.float)
         pos_enc = torch.einsum("i,j->ij", pos_seq, inv_freq)
-        return torch.cat([torch.cos(pos_enc), torch.sin(pos_enc)], dim=-1)
+        return torch.cat([torch.cos(pos_enc), torch.sin(pos_enc)], dim=-1).cuda()
 
     def forward(self, x):
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)

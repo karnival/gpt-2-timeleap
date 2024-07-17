@@ -28,7 +28,6 @@ class RMSNorm(nn.Module):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
-
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
@@ -52,7 +51,9 @@ class CausalSelfAttention(nn.Module):
             self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size))
                                         .view(1, 1, config.block_size, config.block_size))
 
-        self.rope_encodings = self.precompute_rope_encodings(config.block_size, config.n_embd // config.n_head)
+        self.use_rope = config.use_rope
+        if self.use_rope:
+            self.rope_encodings = self.precompute_rope_encodings(config.block_size, config.n_embd // config.n_head)
 
     def apply_rope(self, q, k, pos_encodings):
         """
@@ -100,12 +101,13 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
-        # apply RoPE
-        # q, k = apply_rope(q, k, self.rope_encodings[:T])
-        if self.rope_encodings.shape[0] != T:
-            q, k = self.apply_rope(q, k, self.precompute_rope_encodings(T, self.rope_encodings.shape[1]))
-        else:
-            q, k = self.apply_rope(q, k, self.rope_encodings)
+        if self.use_rope:
+            # apply RoPE
+            # q, k = apply_rope(q, k, self.rope_encodings[:T])
+            if self.rope_encodings.shape[0] != T:
+                q, k = self.apply_rope(q, k, self.precompute_rope_encodings(T, self.rope_encodings.shape[1]))
+            else:
+                q, k = self.apply_rope(q, k, self.rope_encodings)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
@@ -125,21 +127,43 @@ class CausalSelfAttention(nn.Module):
         return y
 
 class MLP(nn.Module):
-
     def __init__(self, config):
         super().__init__()
+        self.activation = config.activation
+        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)  # Updated projection
+        self.dropout = nn.Dropout(config.dropout)
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
-        self.c_proj  = nn.Linear(2 * config.n_embd, config.n_embd, bias=config.bias)
+
+        if self.activation in ["swiglu"]:  # second weight matrix for SwiGLU, note we don't automatically match parameter count by changing hidden units as in PaLM
+            self.c_fc2 = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+
+        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
-        x = self.c_fc(x)
-        x, gate = x.chunk(2, dim=-1)
-        x = F.silu(gate) * x
+
+        if self.activation not in ["swiglu"]:
+            x = self.c_fc(x)
+        
+        if self.activation == 'gelu':
+            # GELU approximation
+            x = 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+        elif self.activation == 'relu':
+            x = F.relu(x)
+        elif self.activation == "silu":
+            x = F.silu(x)
+        elif self.activation == 'swiglu':
+            x1 = self.c_fc(x)
+            x2 = self.c_fc2(x)
+            x = F.silu(x1) * x2
+        else:
+            raise ValueError(f"Unsupported activation function: {self.activation}")
+        
         x = self.c_proj(x)
         x = self.dropout(x)
         return x
-
+        
 class Block(nn.Module):
 
     def __init__(self, config):
@@ -163,6 +187,8 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    activation: str = 'swiglu'  # Default activation function
+    use_rope: bool = True
 
 class GPT(nn.Module):
 

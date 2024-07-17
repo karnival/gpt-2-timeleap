@@ -92,15 +92,15 @@ class MLP(nn.Module):
             # GELU approximation
             x = 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
         elif self.activation == 'relu':
-            # ReLU
-            x = torch.relu(x)
-        elif self.activation == 'silu':
-            # SiLU/Swish
-            x = torch.nn.functional.silu(x)
+            x = F.relu(x)
+        elif self.activation == "silu":
+            x = F.silu(x)
         elif self.activation == 'swiglu':
-            # SwiGLU
-            x, gate = x.chunk(2, dim=-1)
-            x = torch.nn.functional.silu(gate) * x
+            print(x.shape)
+            x1, x2 = x.chunk(2, dim=-1)
+            print(x1.shape)
+            print(x2.shape)
+            x = F.silu(x1) * x2
         else:
             raise ValueError(f"Unsupported activation function: {self.activation}")
         
@@ -124,6 +124,7 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
+    activation: str = "swiglu"
     block_size: int = 1024
     vocab_size: int = 50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
     n_layer: int = 12

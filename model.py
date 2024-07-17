@@ -82,17 +82,27 @@ class MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
-        self.c_proj  = nn.Linear(2 * config.n_embd, config.n_embd, bias=config.bias)
+        self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
+        self.activation = config.activation
 
     def forward(self, x):
         x = self.c_fc(x)
-        x, gate = x.chunk(2, dim=-1)
-        x = F.silu(gate) * x
+        
+        if self.activation == 'gelu':
+            x = F.gelu(x)
+        elif self.activation == 'relu':
+            x = F.relu(x)
+        elif self.activation in ['silu', 'swiglu']:
+            x, gate = x.chunk(2, dim=-1)
+            x = F.silu(gate) * x
+        else:
+            raise ValueError(f"Unsupported activation function: {self.activation}")
+        
         x = self.c_proj(x)
         x = self.dropout(x)
         return x
-
+        
 class Block(nn.Module):
 
     def __init__(self, config):
@@ -114,6 +124,7 @@ class GPTConfig:
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
+    activation: str = 'silu'  # Default to SiLU (same as SwiGLU in the original code)
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 

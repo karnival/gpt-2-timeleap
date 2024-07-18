@@ -143,12 +143,11 @@ class MLP(nn.Module):
 
     def forward(self, x):
 
-        if self.activation not in ["swiglu"]:
+        if self.activation not in ["swiglu"]: # need to preserve original x for swiglu
             x = self.c_fc(x)
         
         if self.activation == 'gelu':
-            # GELU approximation
-            x = 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+            x = F.gelu(x)
         elif self.activation == 'relu':
             x = F.relu(x)
         elif self.activation == "silu":

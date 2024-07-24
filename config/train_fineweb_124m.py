@@ -14,20 +14,17 @@ wandb_project = 'fineweb'
 wandb_run_name = 'improved_gpt_124m'
 
 dataset = 'fineweb'
-gradient_accumulation_steps = 1
-batch_size = 128
-block_size = 256 # context of up to 256 previous characters
+gradient_accumulation_steps = 5*8
+batch_size = 12
+block_size = 1024
 
 # baby GPT model :)
-n_layer = 6
-n_head = 6
-n_embd = 384
+n_layer = 12
+n_head = 12
+n_embd = 768
 dropout = 0
 
-learning_rate = 1e-3 # with baby networks can afford to go a bit higher
-max_iters = 10000
-lr_decay_iters = 10000 # make equal to max_iters usually
-min_lr = 1e-4 # learning_rate / 10 usually
-beta2 = 0.99 # make a bit bigger because number of tokens per iter is small
+max_iters = 5000
+lr_decay_iters = 5000 # make equal to max_iters usually
 
-warmup_iters = 500 # not super necessary potentially
+warmup_iters = 250

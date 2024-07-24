@@ -107,5 +107,5 @@ def write_evalfile(filename, datas):
     # write to file (for HellaSwag val this is 10,042 examples, 3.6MB file)
     print(f"writing {len(datas):,} examples to {filename}")
     with open(filename, "wb") as f:
-        f.write(header.tobytes())
+        #f.write(header.tobytes())
         f.write(stream_np.tobytes())

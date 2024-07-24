@@ -57,6 +57,7 @@ bias = False # do we use bias inside LayerNorm and Linear layers?
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
+lr_decay='cosine'
 weight_decay = 1e-1
 beta1 = 0.9
 beta2 = 0.95
@@ -236,10 +237,16 @@ def get_lr(it):
     if it > lr_decay_iters:
         return min_lr
     # 3) in between, use cosine decay down to min learning rate
-    decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
-    assert 0 <= decay_ratio <= 1
-    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
-    return min_lr + coeff * (learning_rate - min_lr)
+    if lr_decay == 'cosine':
+        decay_ratio = (it - warmup_iters) / (lr_decay_iters - warmup_iters)
+        assert 0 <= decay_ratio <= 1
+        coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
+        return min_lr + coeff * (learning_rate - min_lr)
+    if lr_decay == 'linear':
+        if it < lr_decay_iters*0.8:
+            return learning_rate
+        else:
+            return learning_rate + (min_lr-learning_rate)*(it - lr_decay_iters * 0.8)/(lr_decay_iters*0.2)
 
 # logging
 if wandb_log and master_process:

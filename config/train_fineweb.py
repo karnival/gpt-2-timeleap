@@ -10,8 +10,8 @@ log_interval = 10 # don't print too too often
 always_save_checkpoint = False
 
 wandb_log = True # override via command line if you like
-wandb_project = 'fineweb'
-wandb_run_name = 'improved_gpt_124m'
+wandb_project = 'scaling_laws'
+wandb_run_name = '30M_run'
 
 dataset = 'fineweb'
 gradient_accumulation_steps = 1
@@ -24,6 +24,7 @@ n_head = 6
 n_embd = 384
 dropout = 0
 
+lr_decay='linear'
 learning_rate = 1e-3 # with baby networks can afford to go a bit higher
 max_iters = 10000
 lr_decay_iters = 10000 # make equal to max_iters usually

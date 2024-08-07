@@ -46,7 +46,7 @@ def write_datafile(filename, toks):
     # write to file
     print(f"writing {len(toks):,} tokens to {filename}")
     with open(filename, "wb") as f:
-        f.write(header.tobytes())
+        #f.write(header.tobytes())
         f.write(toks_np.tobytes())
 
 def write_evalfile(filename, datas):

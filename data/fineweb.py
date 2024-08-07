@@ -54,7 +54,7 @@ os.makedirs(DATA_CACHE_DIR, exist_ok=True)
 
 # download the dataset
 if args.type == "classic":
-    fw = load_dataset("HuggingFaceFW/fineweb", name=remote_name, split="train", streaming=True)
+    fw = load_dataset("HuggingFaceFW/fineweb", name=remote_name, split="train", streaming=True).shuffle(seed=42, buffer_size=args.shard_size*10)
     name = "fineweb"
 elif args.type =="edu":
     fw = load_dataset("HuggingFaceFW/fineweb-edu", name=remote_name, split="train")
@@ -82,7 +82,7 @@ with mp.Pool(nprocs) as pool:
     progress_bar = None
     for tokens in pool.imap(tokenize, fw, chunksize=16):
 
-        if shard_index > 1:
+        if shard_index > 10:
             break
 
         # is there enough space in the current shard for the new tokens?

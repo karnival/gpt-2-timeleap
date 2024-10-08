@@ -48,6 +48,7 @@ dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
+vocab_size = 50304
 # model
 n_layer = 12
 n_head = 12
@@ -152,8 +153,8 @@ if 'scratch' in init_from:
     print("Initializing a new model from scratch")
     # determine the vocab size we'll use for from-scratch training
     if meta_vocab_size is None:
-        print("defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
-    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
+        print(f"defaulting to vocab_size of {config['vocab_size']}")
+    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else config['vocab_size']
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
 elif 'resume' in init_from:

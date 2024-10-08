@@ -45,6 +45,7 @@ wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
 dataset = 'openwebtext'
+data_files = 1
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
@@ -115,18 +116,61 @@ ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=
 
 # poor man's data loader
 data_dir = os.path.join('data', dataset)
+
+data_files_train = [os.path.join(data_dir, f'train{i}.bin') for i in range(1, config['data_files'] + 1)]
+data_lengths_train = []
+for file in data_files_train:
+    length = os.path.getsize(file) // np.dtype(np.uint16).itemsize - block_size-1
+    data_lengths_train.append(length)
+cum_lengths_train = np.cumsum(data_lengths_train)
+total_length_train = cum_lengths_train[-1]
+
+data_files_val = [os.path.join(data_dir, 'val.bin')]
+data_lengths_val = []
+for file in data_files_val:
+    length = os.path.getsize(file) // np.dtype(np.uint16).itemsize - block_size-1
+    data_lengths_val.append(length)
+cum_lengths_val = np.cumsum(data_lengths_val)
+total_length_val = cum_lengths_val[-1]
+
+
 def get_batch(split):
-    # We recreate np.memmap every batch to avoid a memory leak, as per
-    # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
     if split == 'train':
-        data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
+        data_files = data_files_train
+        data_lengths = data_lengths_train
+        cum_lengths = cum_lengths_train
+        total_length = total_length_train
     else:
-        data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-    ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
-    y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
+        data_files = data_files_val
+        data_lengths = data_lengths_val
+        cum_lengths = cum_lengths_val
+        total_length = total_length_val
+
+    # Sample random starting indices
+    max_idx = total_length - block_size - 1
+    ix = torch.randint(0, max_idx, (batch_size,))
+    x_list = []
+    y_list = []
+
+    for idx in ix:
+        idx = idx.item()
+        # Find the file index and local index within the file
+        file_idx = np.searchsorted(cum_lengths, idx, side='right')
+        idx_in_file = idx - (cum_lengths[file_idx - 1] if file_idx > 0 else 0)
+
+        # Open the corresponding file and read data using memmap
+        data = np.memmap(data_files[file_idx], dtype=np.uint16, mode='r')
+        x_seq = torch.from_numpy(data[idx_in_file:idx_in_file + block_size].astype(np.int64))
+        y_seq = torch.from_numpy(data[idx_in_file + 1:idx_in_file + 1 + block_size].astype(np.int64))
+        x_list.append(x_seq)
+        y_list.append(y_seq)
+        del data  # Avoid memory leak by deleting memmap
+
+    x = torch.stack(x_list)
+    y = torch.stack(y_list)
+
+    # Move to device
     if device_type == 'cuda':
-        # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
     else:
         x, y = x.to(device), y.to(device)
@@ -153,8 +197,8 @@ if 'scratch' in init_from:
     print("Initializing a new model from scratch")
     # determine the vocab size we'll use for from-scratch training
     if meta_vocab_size is None:
-        print(f"defaulting to vocab_size of {config['vocab_size']}")
-    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else config['vocab_size']
+        print(f"defaulting to vocab_size of {vocab_size}")
+    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else vocab_size
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
 elif 'resume' in init_from:

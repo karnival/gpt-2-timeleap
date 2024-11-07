@@ -61,6 +61,7 @@ learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
 lr_decay='cosine'
 weight_decay = 1e-1
+z_loss = 1e-4
 beta1 = 0.9
 beta2 = 0.95
 grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
@@ -267,8 +268,8 @@ def estimate_loss():
         for k in range(eval_iters):
             X, Y = get_batch(split)
             with ctx:
-                logits, loss = model(X, Y)
-            losses[k] = loss.item()
+                logits, loss, model_loss = model(X, Y)
+            losses[k] = model_loss.item()
         out[split] = losses.mean()
     model.train()
     return out
@@ -349,7 +350,7 @@ while True:
             # looking at the source of that context manager, it just toggles this variable
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss = model(X, Y)
+            logits, loss, model_loss = model(X, Y)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
         X, Y = get_batch('train')
@@ -376,11 +377,12 @@ while True:
         if local_iter_num >= 5: # let the training loop settle a bit
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        print(f"iter {iter_num}: loss {model_loss.item():.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
-                "train/loss": lossf,
+                "train/total_loss": lossf,
+                "train/loss": model_loss.item(),
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
             })

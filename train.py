@@ -177,6 +177,50 @@ def get_batch(split):
         x, y = x.to(device), y.to(device)
     return x, y
 
+def compute_grad_norms(model):
+    """
+    Compute global and per-layer gradient norms for a GPT-style transformer model.
+    Returns both global norm and a dictionary of per-layer norms.
+    """
+    per_layer_norms = {}
+    total_norm = 0.0
+    
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            param_norm = param.grad.data.norm(2).item()
+            total_norm += param_norm ** 2
+            
+            # Categorize based on model structure
+            if name.startswith('transformer.'):
+                # Remove 'transformer.' prefix
+                name = name[12:]
+                
+                if name.startswith('wte.'):
+                    key = 'token_embedding'
+                elif name.startswith('wpe.'):
+                    key = 'position_embedding'
+                elif name.startswith('h.'):
+                    # Extract layer number from h.0, h.1, etc.
+                    layer_idx = name.split('.')[1]
+                    key = f'layer_{layer_idx}'
+                elif name.startswith('ln_f.'):
+                    key = 'final_norm'
+            elif name.startswith('lm_head.'):
+                key = 'lm_head'
+            else:
+                key = 'other'
+                
+            # Add to dictionary, combining norms within same category
+            per_layer_norms[key] = per_layer_norms.get(key, 0.0) + param_norm ** 2
+    
+    # Take sqrt of all norms
+    total_norm = total_norm ** 0.5
+    for key in per_layer_norms:
+        per_layer_norms[key] = per_layer_norms[key] ** 0.5
+        
+    return total_norm, per_layer_norms
+
+
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
 best_val_loss = 1e9
@@ -268,7 +312,7 @@ def estimate_loss():
         for k in range(eval_iters):
             X, Y = get_batch(split)
             with ctx:
-                logits, loss, model_loss = model(X, Y)
+                logits, loss, model_loss, activations = model(X, Y)
             losses[k] = model_loss.item()
         out[split] = losses.mean()
     model.train()
@@ -350,16 +394,21 @@ while True:
             # looking at the source of that context manager, it just toggles this variable
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss, model_loss = model(X, Y)
+            logits, loss, model_loss, activations = model(X, Y)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
         X, Y = get_batch('train')
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
+
+    scaler.unscale_(optimizer)
+
+    global_grad_norm, layer_grad_norms = compute_grad_norms(model)
+
     # clip the gradient
     if grad_clip != 0.0:
-        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
     # step the optimizer and scaler if training in fp16
     scaler.step(optimizer)
     scaler.update()
@@ -385,6 +434,9 @@ while True:
                 "train/loss": model_loss.item(),
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
+                "grad_norms/global": global_grad_norm,
+                **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()}
+                **{"activations/"+k: v.norm(2).item() for k,v in activations.items()}
             })
     iter_num += 1
     local_iter_num += 1

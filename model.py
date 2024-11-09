@@ -99,11 +99,25 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
+        self.log_activations = config.log_activations
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
-        return x
+        activations = dict()
+        y = self.ln_1(x)
+        if self.config.log_activations:
+            activations['pre_attn'] = y.detach()
+        y = self.attn(y)
+        if self.config.log_activations:
+            activations['post_attn'] = y.detach()
+        x = x + y
+        y = self.ln_2(x)
+        if self.config.log_activations:
+            activations['pre_mlp'] = y.detach()
+        y = self.mlp(y)
+        if self.config.log_activations:
+            activations['post_mlp'] = y.detach()
+        x = x + y
+        return x, activations
 
 @dataclass
 class GPTConfig:
@@ -114,6 +128,8 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    z_loss: float = 1e-4
+    log_activations: bool = False
 
 class GPT(nn.Module):
 
@@ -169,6 +185,7 @@ class GPT(nn.Module):
 
     def forward(self, idx, targets=None):
         device = idx.device
+        activations = dict()
         b, t = idx.size()
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
@@ -177,9 +194,17 @@ class GPT(nn.Module):
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        for block in self.transformer.h:
-            x = block(x)
+        if self.config.log_activations:
+            activations['embedding'] = x.detach()
+
+        for i,block in enumerate(self.transformer.h):
+            x, act = block(x)
+            if self.config.log_activations:
+                for k,v in act.items():
+                    activations[f'layer_{i}/{k}'] = v
         x = self.transformer.ln_f(x)
+        if self.config.log_activations:
+            activations['final_norm'] = x.detach()
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
@@ -194,7 +219,7 @@ class GPT(nn.Module):
             logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
             loss = None
 
-        return logits, loss+z_loss, loss
+        return logits, loss+z_loss, loss, activations
 
     def crop_block_size(self, block_size):
         # model surgery to decrease the block size if necessary

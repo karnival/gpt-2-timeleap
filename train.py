@@ -125,6 +125,7 @@ for file in data_files_train:
     data_lengths_train.append(length)
 cum_lengths_train = np.cumsum(data_lengths_train)
 total_length_train = cum_lengths_train[-1]
+num_blocks_train = total_length_train // block_size
 
 data_files_val = [os.path.join(data_dir, 'val.bin')]
 data_lengths_val = []
@@ -133,7 +134,60 @@ for file in data_files_val:
     data_lengths_val.append(length)
 cum_lengths_val = np.cumsum(data_lengths_val)
 total_length_val = cum_lengths_val[-1]
+num_blocks_val = total_length_val // block_size
 
+rng = np.random.RandomState(seed)
+
+block_indices_train = np.arange(0, num_blocks_train)
+rng.shuffle(block_indices_train)
+
+block_indices_val = np.arange(0, num_blocks_val)
+rng.shuffle(block_indices_val)
+
+def get_batch2(split, step):
+    if split == 'train':
+        data_files = data_files_train
+        data_lengths = data_lengths_train
+        cum_lengths = cum_lengths_train
+        total_length = total_length_train
+        num_blocks = num_blocks_train
+        block_indices = block_indices_train
+    else:
+        data_files = data_files_val
+        data_lengths = data_lengths_val
+        cum_lengths = cum_lengths_val
+        total_length = total_length_val
+        num_blocks = num_blocks_val
+        block_indices = block_indices_val
+
+    ix = block_indices[(step*bs % num_blocks):((step+1)*bs % num_blocks)]
+    x_list = []
+    y_list = []
+
+    for idx in ix:
+        # Find the file index and local index within the file
+        file_idx = np.searchsorted(cum_lengths, idx, side='right')
+        idx_in_file = idx - (cum_lengths[file_idx - 1] if file_idx > 0 else 0)
+
+        # Open the corresponding file and read data using memmap
+        data = np.memmap(data_files[file_idx], dtype=np.uint16, mode='r')
+        x_seq = torch.from_numpy(data[idx_in_file:idx_in_file + block_size].astype(np.int64))
+        y_seq = torch.from_numpy(data[idx_in_file + 1:idx_in_file + 1 + block_size].astype(np.int64))
+        x_list.append(x_seq)
+        y_list.append(y_seq)
+        del data  # Avoid memory leak by deleting memmap
+
+    x = torch.stack(x_list)
+    y = torch.stack(y_list)
+
+    # Move to device
+    if device_type == 'cuda':
+        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+    else:
+        x, y = x.to(device), y.to(device)
+    return x, y
+
+    
 
 def get_batch(split):
     if split == 'train':
@@ -310,7 +364,7 @@ def estimate_loss():
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            X, Y = get_batch(split)
+            X, Y = get_batch2(split, k)
             with ctx:
                 logits, loss, model_loss, activations = model(X, Y)
             losses[k] = model_loss.item()
@@ -344,7 +398,7 @@ if wandb_log and master_process:
     wandb.init(project=wandb_project, name=wandb_run_name, config=config, resume="allow")
 
 # training loop
-X, Y = get_batch('train') # fetch the very first batch
+X, Y = get_batch2('train', 0) # fetch the very first batch
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
@@ -397,7 +451,7 @@ while True:
             logits, loss, model_loss, activations = model(X, Y)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
-        X, Y = get_batch('train')
+        X, Y = get_batch2('train', iter_num)
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
 

@@ -518,7 +518,7 @@ while True:
                 "grad_norms/global": global_grad_norm,
                 **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()},
                 **{"activations/"+k: v.norm(2).item() for k,v in activations.items()},
-                **{"attn_entropies/"+k: v for k,v in compute_attention_entropies(activations)},
+                **{"attn_entropies/"+k: v for k,v in compute_attention_entropies(activations).items()},
             })
     iter_num += 1
     local_iter_num += 1

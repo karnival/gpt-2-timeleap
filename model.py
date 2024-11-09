@@ -41,6 +41,7 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        self.log_activations = config.log_activations
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
@@ -50,6 +51,7 @@ class CausalSelfAttention(nn.Module):
                                         .view(1, 1, config.block_size, config.block_size))
 
     def forward(self, x):
+        activations = dict()
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -68,12 +70,14 @@ class CausalSelfAttention(nn.Module):
             att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
+            if self.log_activations:
+                activations['attn_pattern'] = att.detach()
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
-        return y
+        return y, activations
 
 class MLP(nn.Module):
 
@@ -104,17 +108,18 @@ class Block(nn.Module):
     def forward(self, x):
         activations = dict()
         y = self.ln_1(x)
-        if self.config.log_activations:
+        if self.log_activations:
             activations['pre_attn'] = y.detach()
-        y = self.attn(y)
-        if self.config.log_activations:
+        y, attn = self.attn(y)
+        if self.log_activations:
+            activations.update(attn)
             activations['post_attn'] = y.detach()
         x = x + y
         y = self.ln_2(x)
-        if self.config.log_activations:
+        if self.log_activations:
             activations['pre_mlp'] = y.detach()
         y = self.mlp(y)
-        if self.config.log_activations:
+        if self.log_activations:
             activations['post_mlp'] = y.detach()
         x = x + y
         return x, activations

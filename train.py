@@ -107,7 +107,8 @@ print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 if master_process:
     os.makedirs(out_dir, exist_ok=True)
-torch.manual_seed(1337 + seed_offset + int(init_from.split('_')[-1]))
+seed = 1337 + seed_offset + int(init_from.split('_')[-1])
+torch.manual_seed(seed)
 torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
 torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
 device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.autocast
@@ -160,7 +161,7 @@ def get_batch2(split, step):
         num_blocks = num_blocks_val
         block_indices = block_indices_val
 
-    ix = block_indices[(step*bs % num_blocks):((step+1)*bs % num_blocks)]
+    ix = block_indices[(step*batch_size % num_blocks):((step+1)*batch_size % num_blocks)]
     x_list = []
     y_list = []
 
@@ -274,6 +275,32 @@ def compute_grad_norms(model):
         
     return total_norm, per_layer_norms
 
+def compute_attention_entropies(activations):
+    """
+    Compute attention entropy from model activations.
+    Expects the attention patterns to be stored in activations['layer_i/post_attn'].
+    Returns a dictionary mapping layer names to their attention entropy values.
+    """
+    entropies = {}
+    
+    for name, tensor in activations.items():
+        if 'attn_pattern' in name:  # You might need to modify this to match actual key names
+            # Extract layer number from the name
+            layer_idx = name.split('/')[0]
+            
+            # Attention patterns should be shape (batch, num_heads, seq_len, seq_len)
+            attn = tensor
+            
+            # Compute entropy across the last dimension (attention distribution)
+            # entropy = -sum(p * log(p))
+            entropy = -(attn * torch.log(attn + 1e-6)).sum(dim=-1)
+            
+            # Average across sequence length, heads, and batch
+            avg_entropy = entropy.mean().item()
+            
+            entropies[f'{layer_idx}_entropy'] = avg_entropy
+    
+    return entropies
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
@@ -290,7 +317,7 @@ if os.path.exists(meta_path):
 
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
+                  bias=bias, vocab_size=None, dropout=dropout, log_activations=log_activations) # start with model_args from command line
 if 'scratch' in init_from:
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -489,8 +516,9 @@ while True:
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
                 "grad_norms/global": global_grad_norm,
-                **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()}
-                **{"activations/"+k: v.norm(2).item() for k,v in activations.items()}
+                **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()},
+                **{"activations/"+k: v.norm(2).item() for k,v in activations.items()},
+                **{"attn_entropies/"+k: v for k,v in compute_attention_entropies(activations)},
             })
     iter_num += 1
     local_iter_num += 1

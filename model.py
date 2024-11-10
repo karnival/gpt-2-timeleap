@@ -38,8 +38,8 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-        self.q_norm = LayerNorm(self.head_size, bias=config.bias)
-        self.k_norm = LayerNorm(self.head_size, bias=config.bias)
+        self.q_norm = LayerNorm(config.n_embd // config.n_head, bias=config.bias)
+        self.k_norm = LayerNorm(config.n_embd // config.n_head, bias=config.bias)
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout

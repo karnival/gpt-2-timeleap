@@ -161,7 +161,7 @@ def get_batch2(split, step):
         num_blocks = num_blocks_val
         block_indices = block_indices_val
 
-    ix = block_indices[(step*batch_size % num_blocks):((step+1)*batch_size % num_blocks)]
+    ix = block_size*block_indices[(step*batch_size % num_blocks):((step+1)*batch_size % num_blocks)]
     x_list = []
     y_list = []
 

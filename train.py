@@ -516,6 +516,7 @@ while True:
                 "lr": lr,
                 "mfu": running_mfu*100, # convert to percentage
                 "grad_norms/global": global_grad_norm,
+                "activations/logit_norm": logits.norm(2).item(),
                 **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()},
                 **{"activations/"+k: v.norm(2).item() for k,v in activations.items()},
                 **{"attn_entropies/"+k: v for k,v in compute_attention_entropies(activations).items()},

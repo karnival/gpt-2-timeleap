@@ -506,6 +506,7 @@ while True:
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         lossf = loss.item() * gradient_accumulation_steps
+        weight_norm = global_norm = torch.stack([p.norm(2) for p in model.parameters() if p.requires_grad]).norm(2)
         if local_iter_num >= 5: # let the training loop settle a bit
             mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
             running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
@@ -519,6 +520,7 @@ while True:
                 "mfu": running_mfu*100, # convert to percentage
                 "grad_norms/global": global_grad_norm,
                 "activations/logit_norm": logits.norm(2).item(),
+                "weight_norm": weight_norm,
                 **{"grad_norms/"+k: v for k,v in layer_grad_norms.items()},
                 **{"activations/"+k: v.norm(2).item() for k,v in activations.items()},
                 **{"attn_entropies/"+k: v for k,v in compute_attention_entropies(activations).items()},

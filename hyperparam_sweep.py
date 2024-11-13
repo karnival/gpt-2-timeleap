@@ -1,52 +1,50 @@
 models = {
-    5: {
+    1: {
+    "n_layer": 4,
+    "n_head": 2,
+    "n_embd": 128,
+    "vocab_size": 1168,
+    "max_tokens": (1e6*20*4 // (2048*128)) * (2048*128),
+    "dataset": "fineweb_1168",
+    "d_files": 1,
+        },
+    3: {
     "n_layer": 6,
-    "n_head": 4,
-    "n_embd": 224,
-    "vocab_size": 2000,
-    "max_tokens": 5e6*20*4 // (1024*256) * (1024*256),
-    "dataset": "fineweb2",
-    "d_files": 2,
+    "n_head": 3,
+    "n_embd": 192,
+    "vocab_size": 1539,
+    "max_tokens": (3e6*20*4 // (2048*128)) * (2048*128),
+    "dataset": "fineweb_1539",
+    "d_files": 1,
         },
-    16: {
+    10: {
     "n_layer": 12,
-    "n_head": 5,
-    "n_embd": 320,
-    "vocab_size": 5000,
-    "max_tokens": 16e6*20*4 // (1024*256) * (1024*256),
-    "dataset": "fineweb5",
-    "d_files": 2,
-        },
-    47: {
-    "n_layer": 18,
-    "n_head": 7,
-    "n_embd": 448,
-    "vocab_size": 9000,
-    "max_tokens": 47e6*20*4 // (1024*256) * (1024*256),
-    "dataset": "fineweb9",
-    "d_files": 5,
+    "n_head": 4,
+    "n_embd": 256,
+    "vocab_size": 1871,
+    "max_tokens": (10e6*20*4 // (2048*128)) * (2048*128),
+    "dataset": "fineweb_1871",
+    "d_files": 1,
         }
 }
 
-batch_sizes = [16, 32, 64, 128]
-beta2 = [0.95]
-lrs = [6e-4, 1.2e-3, 2.4e-3, 4.8e-3, 1e-2]
+batch_sizes = [8, 12, 16, 24, 32, 48, 64, 96, 128]
+beta2 = [0.95, 0.99]
+lrs = [6e-4, 1.2e-3, 2.4e-3, 4.8e-3, 1e-2, 2e-2]
 
 ga = 1
 
-for n, params in [(k, models[k]) for k in [47,16,5]]:
-    i = 0
+i = 0
+
+for n, params in [(k, models[k]) for k in [1, 3, 10]]:
     for bs in batch_sizes:
-        if n == 47 and bs > 64:
-            ga = bs // 64
-            bs = 64
         for b2 in beta2:
             for lr in lrs:
                 n_iters = int(params['max_tokens']) // (1024*bs*ga)
                 eval_interval = n_iters
                 warmup = n_iters // 80
                 config = f"""
-out_dir = 'out-s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+out_dir = 'out-fw_s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
 eval_interval = {eval_interval} # keep frequent because we'll overfit
 eval_iters = 200
 log_interval = 10 # don't print too too often
@@ -55,13 +53,13 @@ always_save_checkpoint = True
 
 wandb_log = True # override via command line if you like
 wandb_project = 'scaling_laws'
-wandb_run_name = 'sweep2_s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+wandb_run_name = 'sweep_new_1_fw_s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
 
 dataset = "{params['dataset']}"
 data_files = {params['d_files']}
 gradient_accumulation_steps = {ga}
 batch_size = {bs}
-block_size = 1024
+block_size = 2048
 
 vocab_size = {params['vocab_size']}
 
@@ -82,6 +80,7 @@ beta2 = {b2}
 warmup_iters = {warmup}
 
 weight_decay = 1e-4/learning_rate
+z_loss = 1e-4
                 """
 
                 with open(f"config{i}.py", "w") as f:

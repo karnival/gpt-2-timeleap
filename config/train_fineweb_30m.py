@@ -11,7 +11,7 @@ always_save_checkpoint = True
 
 wandb_log = True # override via command line if you like
 wandb_project = 'scaling_laws'
-wandb_run_name = 'fw_s10M_v2466_d384_18_const_bs64_wm5p_lr8e3'
+wandb_run_name = 'fw_s30M_v2466_d384_18_const_bs64_wm5p_lr8e3'
 log_activations = True
 
 dataset = 'fineweb'

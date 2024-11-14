@@ -1,3 +1,5 @@
+dataset = 'cp'
+
 models = {
     1: {
     "n_layer": 4,
@@ -5,8 +7,9 @@ models = {
     "n_embd": 128,
     "vocab_size": 1168,
     "max_tokens": (1e6*20*4 // (2048*128)) * (2048*128),
-    "dataset": "fineweb_1168",
+    "dataset": f"{dataset}_1168",
     "d_files": 1,
+    "batch_sizes": [8,12,16,24]
         },
     3: {
     "n_layer": 6,
@@ -14,8 +17,9 @@ models = {
     "n_embd": 192,
     "vocab_size": 1539,
     "max_tokens": (3e6*20*4 // (2048*128)) * (2048*128),
-    "dataset": "fineweb_1539",
+    "dataset": f"{dataset}_1539",
     "d_files": 1,
+    "batch_sizes": [12,16,24,32]
         },
     10: {
     "n_layer": 12,
@@ -23,21 +27,21 @@ models = {
     "n_embd": 256,
     "vocab_size": 1871,
     "max_tokens": (10e6*20*4 // (2048*128)) * (2048*128),
-    "dataset": "fineweb_1871",
+    "dataset": f"{dataset}_1871",
     "d_files": 1,
+    "batch_sizes": [16,24,32,48,64]
         }
 }
 
-batch_sizes = [8, 12, 16, 24, 32, 48, 64, 96, 128]
 beta2 = [0.95, 0.99]
-lrs = [6e-4, 1.2e-3, 2.4e-3, 4.8e-3, 1e-2, 2e-2]
+lrs = [6e-4, 1.2e-3, 2.4e-3, 4.8e-3, 1e-2]
 
 ga = 1
 
 i = 0
 
 for n, params in [(k, models[k]) for k in [1, 3, 10]]:
-    for bs in batch_sizes:
+    for bs in models[n]['batch_sizes']:
         for b2 in beta2:
             for lr in lrs:
                 n_iters = int(params['max_tokens']) // (2048*bs*ga)

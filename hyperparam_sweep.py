@@ -6,7 +6,7 @@ models = {
     "n_head": 2,
     "n_embd": 128,
     "vocab_size": 1168,
-    "max_tokens": (1e6*20*4 // (2048*128)) * (2048*128),
+    "max_tokens": (1e6*20 // (2048*128)) * (2048*128),
     "dataset": f"{dataset}_1168",
     "d_files": 1,
     "batch_sizes": [8,12,16,24]
@@ -16,7 +16,7 @@ models = {
     "n_head": 3,
     "n_embd": 192,
     "vocab_size": 1539,
-    "max_tokens": (3e6*20*4 // (2048*128)) * (2048*128),
+    "max_tokens": (3e6*20*2 // (2048*128)) * (2048*128),
     "dataset": f"{dataset}_1539",
     "d_files": 1,
     "batch_sizes": [12,16,24,32]
@@ -26,7 +26,7 @@ models = {
     "n_head": 4,
     "n_embd": 256,
     "vocab_size": 1871,
-    "max_tokens": (10e6*20*4 // (2048*128)) * (2048*128),
+    "max_tokens": (10e6*20 // (2048*128)) * (2048*128),
     "dataset": f"{dataset}_1871",
     "d_files": 1,
     "batch_sizes": [16,24,32,48,64]

@@ -40,7 +40,7 @@ for n, params in [(k, models[k]) for k in [1, 3, 10]]:
     for bs in batch_sizes:
         for b2 in beta2:
             for lr in lrs:
-                n_iters = int(params['max_tokens']) // (1024*bs*ga)
+                n_iters = int(params['max_tokens']) // (2048*bs*ga)
                 eval_interval = n_iters
                 warmup = n_iters // 80
                 config = f"""

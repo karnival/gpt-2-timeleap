@@ -146,11 +146,26 @@ rng.shuffle(block_indices_train)
 block_indices_val = np.arange(0, num_blocks_val)
 rng.shuffle(block_indices_val)
 
+def load_data_to_memory(data_files):
+    """Load all data files into RAM and pin them"""
+    all_data = []
+    for file in data_files:
+        # Load the full file into RAM
+        data = np.fromfile(file, dtype=np.uint16)
+        # Convert to torch tensor and pin
+        data_tensor = torch.from_numpy(data.astype(np.int64)).pin_memory()
+        all_data.append(data_tensor)
+    return all_data
+
+train_data = load_data_to_memory(data_files_train)
+val_data = load_data_to_memory(data_files_val)
+
 def get_batch2(split, step):
     if split == 'train':
         data_files = data_files_train
         data_lengths = data_lengths_train
         cum_lengths = cum_lengths_train
+        data = train_data
         total_length = total_length_train
         num_blocks = num_blocks_train
         block_indices = block_indices_train
@@ -158,6 +173,7 @@ def get_batch2(split, step):
         data_files = data_files_val
         data_lengths = data_lengths_val
         cum_lengths = cum_lengths_val
+        data = val_data
         total_length = total_length_val
         num_blocks = num_blocks_val
         block_indices = block_indices_val
@@ -173,19 +189,17 @@ def get_batch2(split, step):
         idx_in_file = idx - (cum_lengths[file_idx - 1] if file_idx > 0 else 0)
 
         # Open the corresponding file and read data using memmap
-        data = np.memmap(data_files[file_idx], dtype=np.uint16, mode='r')
-        x_seq = torch.from_numpy(data[idx_in_file:idx_in_file + block_size].astype(np.int64))
-        y_seq = torch.from_numpy(data[idx_in_file + 1:idx_in_file + 1 + block_size].astype(np.int64))
+        x_seq = data[file_idx][idx_in_file:idx_in_file + block_size]
+        y_seq = data[file_idx][idx_in_file + 1:idx_in_file + 1 + block_size]
         x_list.append(x_seq)
         y_list.append(y_seq)
-        del data  # Avoid memory leak by deleting memmap
 
     x = torch.stack(x_list)
     y = torch.stack(y_list)
 
     # Move to device
     if device_type == 'cuda':
-        x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
     else:
         x, y = x.to(device), y.to(device)
     return x, y

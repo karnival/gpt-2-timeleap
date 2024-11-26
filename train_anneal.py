@@ -26,7 +26,7 @@ models =  {
     "n_head": 3,
     "n_embd": 192,
     "vocab_size": 1539,
-    "max_tokens": ((12*6*192*2 + 192*1539)*20*max_overtrain // (2048*16)) * (2048*16),
+    "max_tokens": ((12*6*192**2 + 192*1539)*20*max_overtrain // (2048*16)) * (2048*16),
     "dataset": f"{dataset}_1539",
     "d_files": 1,
     "batch_size": 16,
@@ -37,7 +37,7 @@ models =  {
     "n_head": 4,
     "n_embd": 256,
     "vocab_size": 1871,
-    "max_tokens": ((12*12*256*2 + 256*1871)*20*max_overtrain // (2048*32)) * (2048*32),
+    "max_tokens": ((12*12*256**2 + 256*1871)*20*max_overtrain // (2048*32)) * (2048*32),
     "dataset": f"{dataset}_1871",
     "d_files": 1,
     "batch_size": 32,
@@ -53,7 +53,7 @@ n_iters = int(model['max_tokens']) // (2048*bs*ga)
 eval_interval = n_iters//(10*max_overtrain//4)
 warmup = n_iters // (20*max_overtrain)
 
-for i in range(0, max_overtrain*20, 8):
+for i in range(0, max_overtrain*20+1, 8):
     if i == 0:
         name = f'backbone_{version}'
         init_from = 'scratch_0'

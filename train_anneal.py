@@ -1,3 +1,5 @@
+import os
+
 dataset = 'fineweb'
 
 n = 1
@@ -26,19 +28,21 @@ warmup = n_iters // (20*max_overtrain)
 for i in range(0, max_overtrain*20, 8):
     if i == 0:
         name = 'backbone1'
-        init_from = 'scracth_0'
+        init_from = 'scratch_0'
         max_iters = n_iters
+        evint = eval_interval
         decay_lr = False
     else:
         name = f'm{str(i)}'
         init_from = 'resume_0'
-        max_iters = eval_interval * i
+        max_iters = eval_interval * i // 8
+        evint = max_iters
         decay_lr = True
 
     runid = f"lrtest_{name}_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}"
     config = f"""
 out_dir = 'out-{runid}'
-eval_interval = {eval_interval} # keep frequent because we'll overfit
+eval_interval = {evint} # keep frequent because we'll overfit
 eval_iters = 200
 log_interval = 10 # don't print too too often
 

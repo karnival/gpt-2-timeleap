@@ -4,6 +4,7 @@ n = 1
 beta2 = [0.95]
 lr = 5e-3
 bs = 8
+b2 = 0.95
 ga = 1
 max_overtrain = 8
 
@@ -15,7 +16,7 @@ model = {
     "max_tokens": ((12*4*128**2 + 128*1168)*20*max_overtrain // (2048*bs*ga)) * (2048*bs*ga),
     "dataset": f"{dataset}_1168",
     "d_files": 1,
-        },
+        }
 
 
 n_iters = int(model['max_tokens']) // (2048*bs*ga)
@@ -34,7 +35,7 @@ for i in range(0, max_overtrain*20, 8):
         max_iters = eval_interval * i
         decay_lr = True
     config = f"""
-out_dir = 'out-lrtest_{name}_fw_s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+out_dir = 'out-lrtest_{name}_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
 eval_interval = {eval_interval} # keep frequent because we'll overfit
 eval_iters = 200
 log_interval = 10 # don't print too too often
@@ -43,22 +44,22 @@ always_save_checkpoint = True
 
 wandb_log = True # override via command line if you like
 wandb_project = 'scaling_laws'
-wandb_run_name = 'lrtest_backbone1_fw_s{n}M_v{params['vocab_size']}_d{params['n_embd']}_l{params['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+wandb_run_name = 'lrtest_backbone1_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
 log_activations = False
 init_from = {init_from}
 
-dataset = "{params['dataset']}"
-data_files = {params['d_files']}
+dataset = "{model['dataset']}"
+data_files = {model['d_files']}
 gradient_accumulation_steps = {ga}
 batch_size = {bs}
 block_size = 2048
 
-vocab_size = {params['vocab_size']}
+vocab_size = {model['vocab_size']}
 
 # baby GPT model :)
-n_layer = {params['n_layer']}
-n_head = {params['n_head']}
-n_embd = {params['n_embd']}
+n_layer = {model['n_layer']}
+n_head = {model['n_head']}
+n_embd = {model['n_embd']}
 dropout = 0
 
 max_iters = {max_iters}

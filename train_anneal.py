@@ -1,4 +1,4 @@
-dataset = 'fw'
+dataset = 'fineweb'
 
 n = 1
 beta2 = [0.95]
@@ -34,8 +34,10 @@ for i in range(0, max_overtrain*20, 8):
         init_from = 'resume_0'
         max_iters = eval_interval * i
         decay_lr = True
+
+    runid = f"lrtest_{name}_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}"
     config = f"""
-out_dir = 'out-lrtest_{name}_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+out_dir = 'out-{runid}'
 eval_interval = {eval_interval} # keep frequent because we'll overfit
 eval_iters = 200
 log_interval = 10 # don't print too too often
@@ -44,9 +46,9 @@ always_save_checkpoint = True
 
 wandb_log = True # override via command line if you like
 wandb_project = 'scaling_laws'
-wandb_run_name = 'lrtest_backbone1_fw_s{n}M_v{model['vocab_size']}_d{model['n_embd']}_l{model['n_layer']}_lin_bs{bs*ga}_wm5p_lr{lr}_b2{b2}'
+wandb_run_name = '{runid}'
 log_activations = False
-init_from = {init_from}
+init_from = '{init_from}'
 
 dataset = "{model['dataset']}"
 data_files = {model['d_files']}
@@ -77,5 +79,6 @@ weight_decay = 1e-4/learning_rate
 z_loss = 1e-4
                 """
 
+    os.mkdir(f'out-{runid}')
     with open(f"train_{name}.py", "w") as f:
         f.write(config)
